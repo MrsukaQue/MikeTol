@@ -16,7 +16,7 @@ async function connectBot() {
         version,
         auth: state,
         browser: Browsers.macOS('Intro Bot Mikail'),
-        printQRInTerminal: false
+        
     })
 
     sock.ev.on('creds.update', saveCreds)
