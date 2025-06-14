@@ -1,0 +1,14 @@
+{
+    "name": "intro-mikail-bot",
+    "version": "1.0.0",
+    "description": "Bot WhatsApp untuk perkenalan nomor baru Mikail menggunakan Baileys + Pairing Code",
+    "main": "introMikailBot.js",
+    "scripts": {
+        "start": "node introMikailBot.js"
+    },
+    "author": "Mikail",
+    "license": "MIT",
+    "dependencies": {
+        "@whiskeysockets/baileys": "^6.6.0"
+    }
+}
