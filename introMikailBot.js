@@ -1,81 +1,93 @@
+const fs = require('fs');
+const { makeWASocket, useMultiFileAuthState } = require("@whiskeysockets/baileys");
+const pino = require("pino");
+const chalk = require("chalk");
+const readline = require("readline");
 
-const {
-    makeWASocket,
-    useMultiFileAuthState,
-    fetchLatestBaileysVersion,
-    Browsers,
-    delay,
-    DisconnectReason
-} = require('@whiskeysockets/baileys')
+const usePairingCode = true;
+const cooldownFile = './cooldown.json';
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function question(prompt) {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  return new Promise((resolve) =>
+    rl.question(prompt, (ans) => {
+      rl.close();
+      resolve(ans.trim());
+    })
+  );
+}
 
 async function connectBot() {
-    const { state, saveCreds } = await useMultiFileAuthState('./auth_info_mikail')
-    const { version } = await fetchLatestBaileysVersion()
+  console.log(chalk.blue("🔌 Menghubungkan ke WhatsApp..."));
 
-    const sock = makeWASocket({
-        version,
-        auth: state,
-        browser: Browsers.macOS('Intro Bot Mikail'),
-        
-    })
+  const { state, saveCreds } = await useMultiFileAuthState('./session');
 
-    sock.ev.on('creds.update', saveCreds)
+  const sock = makeWASocket({
+    logger: pino({ level: "silent" }),
+    printQRInTerminal: !usePairingCode,
+    auth: state,
+    browser: ["Ubuntu", "Chrome", "20.0.04"],
+    version: [2, 3000, 1015901307],
+  });
 
-    sock.ev.on('connection.update', async (update) => {
-        const { connection, lastDisconnect } = update
-
-        if (connection === 'open') {
-            console.log('✅ Terhubung ke WhatsApp!')
-            await kirimPerkenalan(sock)
-        } else if (connection === 'close') {
-            const code = lastDisconnect?.error?.output?.statusCode
-            if (code !== DisconnectReason.loggedOut) {
-                console.log('🔁 Mencoba konek ulang...')
-                connectBot()
-            } else {
-                console.log('❌ Logout. Silakan pairing ulang.')
-            }
-        }
-    })
-
-    // Pairing code kalau belum login
-    if (!sock.authState.creds.registered) {
-        const phoneNumber = '6285860462060'
-        const code = await sock.requestPairingCode(phoneNumber)
-        console.log(`📟 Pairing Code untuk ${phoneNumber}: ${code}`)
+  if (usePairingCode && !sock.authState.creds.registered) {
+    const phoneNumber = await question("📱 Masukkan nomor WhatsApp kamu (contoh: 628xxxxx): ");
+    try {
+      const code = await sock.requestPairingCode(phoneNumber);
+      console.log(chalk.green(`✅ Pairing Code: ${code}`));
+    } catch (err) {
+      console.error(chalk.red("❌ Gagal pairing:"), err);
+      return;
     }
-}
+  }
 
-async function kirimPerkenalan(sock) {
-    const cooldown = 50000 // 5 detik
-    const contacts = await sock.getContacts()
+  sock.ev.on("creds.update", saveCreds);
 
-    const pesan = `📩 *Assalamualaikum Wr. Wb.*
+  sock.ev.on("connection.update", ({ connection }) => {
+    if (connection === "open") {
+      console.log(chalk.green("🤖 Bot berhasil terhubung dan aktif!"));
+    } else if (connection === "close") {
+      console.log(chalk.red("❌ Koneksi terputus. Mengulang..."));
+      connectBot();
+    }
+  });
 
-Ini *Mikail* — saya menggunakan *nomor baru* karena akun WhatsApp lama saya:
-❗ *Telah dihack*
-❌ *Diblokir oleh WhatsApp*
+  sock.ev.on("messages.upsert", async ({ messages }) => {
+    const msg = messages[0];
+    if (!msg.message || msg.key.fromMe || msg.message.protocolMessage) return;
 
-Mohon hati-hati: Jika ada yang *mengatasnamakan Mikail* dari nomor lain, itu *BUKAN saya.*
+    const from = msg.key.remoteJid;
+    const sender = from.replace("@s.whatsapp.net", "");
 
-📲 Tolong simpan nomor ini. Terima kasih banyak atas pengertiannya.
-🙏 Auto Sender By Mike`
+    let text = "";
+    if (msg.message?.conversation) text = msg.message.conversation;
+    else if (msg.message?.extendedTextMessage?.text) text = msg.message.extendedTextMessage.text;
 
-    console.log(`📬 Mengirim pesan ke ${contacts.length} kontak dengan jeda ${cooldown / 1000} detik...`)
+    // Cooldown system
+    const cooldownData = fs.existsSync(cooldownFile)
+      ? JSON.parse(fs.readFileSync(cooldownFile))
+      : {};
 
-    for (const contact of contacts) {
-        try {
-            if (contact.id.endsWith('@s.whatsapp.net')) {
-                await sock.sendMessage(contact.id, { text: pesan })
-                console.log(`✅ Terkirim ke ${contact.id}`)
-                await delay(cooldown)
-            }
-        } catch (err) {
-            console.log(`⚠️ Gagal ke ${contact.id}: ${err.message}`)
-        }
+    const now = Date.now();
+    const cooldown = cooldownData[sender] || 0;
+    const customCooldown = parseInt(await question("⏱️ Masukkan jeda antar pesan dalam milidetik (misal 5000 untuk 5 detik): "), 10);
+
+    if (now - cooldown < customCooldown) {
+      const sisa = ((customCooldown - (now - cooldown)) / 1000).toFixed(1);
+      await sock.sendMessage(from, { text: `⏳ Tunggu ${sisa} detik sebelum mengirim pesan lagi.` });
+      return;
     }
 
-    console.log('🎉 Semua pesan selesai dikirim.')
+    cooldownData[sender] = now;
+    fs.writeFileSync(cooldownFile, JSON.stringify(cooldownData, null, 2));
+
+    await sock.sendMessage(from, { text: `Halo ${sender}, pesan kamu diterima!` });
+  });
 }
 
-connectBot()
+connectBot();
