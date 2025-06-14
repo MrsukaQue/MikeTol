@@ -47,7 +47,7 @@ async function connectBot() {
 }
 
 async function kirimPerkenalan(sock) {
-    const cooldown = 5000 // 5 detik
+    const cooldown = 50000 // 5 detik
     const contacts = await sock.getContacts()
 
     const pesan = `📩 *Assalamualaikum Wr. Wb.*
