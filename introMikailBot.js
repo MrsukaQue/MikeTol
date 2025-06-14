@@ -59,7 +59,7 @@ Ini *Mikail* — saya menggunakan *nomor baru* karena akun WhatsApp lama saya:
 Mohon hati-hati: Jika ada yang *mengatasnamakan Mikail* dari nomor lain, itu *BUKAN saya.*
 
 📲 Tolong simpan nomor ini. Terima kasih banyak atas pengertiannya.
-🙏`
+🙏 Auto Sender By Mike`
 
     console.log(`📬 Mengirim pesan ke ${contacts.length} kontak dengan jeda ${cooldown / 1000} detik...`)
 
